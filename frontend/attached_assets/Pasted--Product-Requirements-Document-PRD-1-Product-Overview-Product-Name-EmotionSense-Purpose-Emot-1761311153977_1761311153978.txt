@@ -1,0 +1,126 @@
+🧠 Product Requirements Document (PRD)
+1. Product Overview
+
+Product Name: EmotionSense
+Purpose: EmotionSense is an AI-powered wellness application that detects, monitors, and visualizes a user’s emotional and stress states in real time using the device camera. It provides insights, trends, and motivational feedback to help users understand and manage their emotional well-being.
+
+2. Objectives
+
+Help users track and manage their mood and stress levels using AI-based emotion recognition.
+
+Provide real-time feedback and historical insights to promote self-awareness and emotional growth.
+
+Ensure data privacy and control, allowing users to decide how their information is stored or shared.
+
+3. Key Features
+A. Real-Time Emotion Detection
+
+Live Camera Preview
+
+Enables users to align their face properly.
+
+Includes Start, Stop, and Pause capture buttons.
+
+Face Detection Cues
+
+Display visual confirmation (e.g., green outline) when a face is recognized.
+
+Mood/Stress Scoring
+
+Real-time AI-generated mood/stress score displayed prominently on screen.
+
+Emotion Highlighting
+
+Current detected emotion (e.g., happy, stressed, calm, sad) is visually highlighted.
+
+Dynamic Trend Chart
+
+Real-time line or chart showing changes in mood/stress levels during the ongoing session.
+
+B. Insights & History
+
+Mood/Stress History
+
+Review emotional data over daily, weekly, or monthly views.
+
+Export Options
+
+Export mood trends and history in CSV or PDF format.
+
+Goal Tracking
+
+Set and monitor mood/stress targets (e.g., “Reduce average stress by 10% this week”).
+
+C. User Personalization
+
+User Profile
+
+Avatar, name, and user preferences (notification and privacy settings).
+
+Reminders & Nudges
+
+Gentle reminders or motivational prompts for consistent session use.
+
+Relaxation Tips & Quotes
+
+Display helpful suggestions or inspirational messages when stress is detected.
+
+D. Security & Privacy
+
+Data Control
+
+Option to disable video storage or anonymize facial data.
+
+Secure Session Management
+
+Auto session timeout and secure logout functionality.
+
+4. User Flow Summary
+
+User opens the app and logs in.
+
+User starts a live emotion session → aligns face using camera preview.
+
+System detects face → displays emotion and stress level.
+
+User observes live trend chart and receives optional tips.
+
+After session, user can review insights and export data.
+
+Regular reminders encourage ongoing engagement.
+
+5. Technical Requirements
+
+Frontend: React Native / Flutter
+
+Backend: Node.js + Python (for AI processing)
+
+AI Model: TensorFlow/MediaPipe for facial emotion recognition
+
+Database: Firebase / PostgreSQL
+
+Export Library: PDFKit, CSV parser
+
+Security: End-to-end encryption, GDPR-compliant storage
+
+6. Success Metrics
+
+User retention rate over 30 days
+
+Average sessions per user per week
+
+Decrease in user-reported stress scores over time
+
+Number of exports and trend reviews
+
+Privacy compliance and zero data breaches
+
+7. Future Enhancements (Optional)
+
+Integration with wearable devices (heart rate, HRV).
+
+Voice tone emotion detection.
+
+Personalized AI coaching for stress management.
+
+Gamified progress badges for motivation.
