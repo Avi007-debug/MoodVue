@@ -2,6 +2,7 @@
   "name": "rest-express",
   "version": "1.0.0",
   "type": "module",
+  "private": true,
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
@@ -11,6 +12,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",

@@ -9,4 +9,4 @@ if __name__ == '__main__':
     # Run the app
     # debug=False and use_reloader=False are important for stability
     # when using background threads.
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=5001, debug=False, threaded=True, use_reloader=False)
