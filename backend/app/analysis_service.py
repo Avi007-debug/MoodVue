@@ -91,6 +91,7 @@ class AnalysisService:
                             
                             all_emotions = result[0]['emotion'] 
                             dominant_emotion = result[0]['dominant_emotion']
+                            face_region = result[0]['region']
                             
                             # Check if the winner is "neutral" and it's not a super-confident neutral
                             if dominant_emotion == 'neutral' and all_emotions['neutral'] < 80:
@@ -115,15 +116,29 @@ class AnalysisService:
                                 "emotion": dominant_emotion,
                                 "confidence": confidence,
                                 "stress_score": stress_score,
-                                "all_emotions": all_emotions
+                                "all_emotions": all_emotions,
+                                "face_detected": True,
+                                "region": face_region
                             }
                             
                         else:
-                            analysis_result = {"emotion": "unknown", "confidence": 0.0, "stress_score": 0}
+                            analysis_result = {
+                                "emotion": "unknown", 
+                                "confidence": 0.0, 
+                                "stress_score": 0,
+                                "face_detected": False,
+                                "region": {'x':0,'y':0,'w':0,'h':0}
+                            }
 
                     except Exception as e:
                         print(f"!!! DEEPFACE CRASHED: {e}") 
-                        analysis_result = {"emotion": "error", "confidence": 0.0, "stress_score": -1}
+                        analysis_result = {
+                            "emotion": "error", 
+                            "confidence": 0.0, 
+                            "stress_score": -1,
+                            "face_detected": False,
+                            "region": {'x':0,'y':0,'w':0,'h':0}
+                        }
                     
                     # Update global state
                     with self.data_lock:
@@ -134,6 +149,8 @@ class AnalysisService:
                 frame_count += 1
                 time.sleep(0.01) # Control loop speed
 
+    # In analysis_service.py
+
     def generate_video_feed(self):
         """Generator for the video feed."""
         while True:
@@ -143,8 +160,24 @@ class AnalysisService:
 
             with self.data_lock:
                 frame = self.last_frame.copy()
-                emotion = self.last_analysis.get("emotion", "loading...")
-                stress = self.last_analysis.get("stress_score", 0)
+                # Get all analysis data at once
+                analysis_data = self.last_analysis.copy()
+            
+            # Get individual items for text drawing
+            emotion = analysis_data.get("emotion", "loading...")
+            stress = analysis_data.get("stress_score", 0)
+
+            # --- NEW: Draw rectangle ---
+            if analysis_data.get("face_detected", False):
+                try:
+                    region = analysis_data['region']
+                    x, y, w, h = region['x'], region['y'], region['w'], region['h']
+                    
+                    # Draw the GREEN bounding box (BGR format)
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                except Exception as e:
+                    print(f"Error drawing rectangle: {e}")
+            # --- END NEW ---
 
             # Draw info on the frame
             cv2.putText(frame, f"Emotion: {emotion}", (10, 30), 
