@@ -1,20 +1,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 
-interface User {
+interface Profile {
   id: string;
   email: string;
   full_name: string;
-  avatar?: string;
-}
-
-interface Session {
-  access_token: string;
-  refresh_token: string;
+  avatar_url?: string;
+  settings: {
+    videoStorage: boolean;
+    dataAnonymization: boolean;
+    notifications: boolean;
+    insightSharing: boolean;
+    theme: string;
+  };
 }
 
 interface AuthContextType {
   user: User | null;
+  profile: Profile | null;
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName: string) => Promise<void>;
@@ -34,63 +39,68 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch user profile whenever the user changes
   useEffect(() => {
-    const initializeAuth = async () => {
-      const accessToken = localStorage.getItem('access_token');
-      if (accessToken) {
-        try {
-          const response = await fetch(`${api.baseUrl}/auth/profile`, {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`
-            }
-          });
-          
-          if (response.ok) {
-            const profile = await response.json();
-            setUser(profile.data);
-            setSession({
-              access_token: accessToken,
-              refresh_token: localStorage.getItem('refresh_token') || ''
-            });
-          }
-        } catch (error) {
-          console.error('Error initializing auth:', error);
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-        }
+    const fetchProfile = async () => {
+      if (!user) {
+        setProfile(null);
+        return;
       }
-      setIsLoading(false);
+
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+        setProfile(profile);
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+        setProfile(null);
+      }
     };
 
-    initializeAuth();
+    fetchProfile();
+  }, [user]);
+
+  // Set up Supabase auth state listener
+  useEffect(() => {
+    // Get current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${api.baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Login failed');
-      }
+      if (error) throw error;
 
-      const data = await response.json();
-      
-      localStorage.setItem('access_token', data.session.access_token);
-      localStorage.setItem('refresh_token', data.session.refresh_token);
-      
-      setUser(data.user);
-      setSession(data.session);
+      return data;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -102,26 +112,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (email: string, password: string, fullName: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${api.baseUrl}/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
         },
-        body: JSON.stringify({ email, password, full_name: fullName })
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Registration failed');
-      }
+      if (error) throw error;
 
-      const data = await response.json();
-      
-      localStorage.setItem('access_token', data.session.access_token);
-      localStorage.setItem('refresh_token', data.session.refresh_token);
-      
-      setUser(data.user);
-      setSession(data.session);
+      // Profile will be created automatically by the database trigger
+      return data;
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
@@ -132,21 +136,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      const accessToken = localStorage.getItem('access_token');
-      if (accessToken) {
-        await fetch(`${api.baseUrl}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        });
-      }
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     } catch (error) {
       console.error('Logout error:', error);
+      throw error;
     } finally {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
       setUser(null);
+      setProfile(null);
       setSession(null);
     }
   };
@@ -154,6 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{
       user,
+      profile,
       session,
       login,
       register,

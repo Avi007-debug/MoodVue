@@ -12,12 +12,14 @@ import LiveSession from "@/pages/LiveSession";
 import Insights from "@/pages/Insights";
 import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
+import Register from "@/pages/Register";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route 
         path="/" 
         component={() => (
@@ -57,7 +59,7 @@ function Router() {
 
 function AppContent() {
   const [location, setLocation] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const isAuthRoute = location === "/login" || location === "/register";
 
   if (isAuthRoute) {
@@ -67,8 +69,8 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-background">
       <Header 
-        userName={user?.full_name || "Guest"}
-        userAvatar={user?.avatar}
+        userName={profile?.full_name || user?.email?.split('@')[0] || "Guest"}
+        userAvatar={profile?.avatar_url}
         onProfileClick={() => setLocation("/profile")}
         onSettingsClick={() => setLocation("/profile")}
         onLogout={logout}

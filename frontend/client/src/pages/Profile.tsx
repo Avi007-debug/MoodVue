@@ -1,15 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Camera, Mail, User as UserIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
 import SettingsPanel from "@/components/SettingsPanel";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export default function Profile() {
-  const [name, setName] = useState("Alex Morgan");
-  const [email, setEmail] = useState("alex.morgan@example.com");
+  const { user, profile } = useAuth();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [settings, setSettings] = useState({
     videoStorage: false,
     dataAnonymization: true,
@@ -17,9 +23,81 @@ export default function Profile() {
     insightSharing: false,
   });
 
-  const handleSettingChange = (key: string, value: boolean) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-    console.log(`Setting ${key} changed to:`, value);
+  useEffect(() => {
+    if (profile) {
+      setName(profile.full_name || "");
+      setEmail(profile.email || "");
+      setSettings(profile.settings || {
+        videoStorage: false,
+        dataAnonymization: true,
+        notifications: true,
+        insightSharing: false,
+      });
+    }
+  }, [profile]);
+
+  const updateProfile = async () => {
+    if (!user) return;
+
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: name,
+          settings: settings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Profile updated successfully",
+      });
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update profile",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSettingChange = async (key: string, value: boolean) => {
+    const newSettings = { ...settings, [key]: value };
+    setSettings(newSettings);
+    
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          settings: newSettings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user?.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Settings updated successfully",
+      });
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update settings",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -78,10 +156,11 @@ export default function Profile() {
 
             <Button 
               className="w-full"
-              onClick={() => console.log("Profile updated:", { name, email })}
+              onClick={updateProfile}
+              disabled={isLoading}
               data-testid="button-save-profile"
             >
-              Save Changes
+              {isLoading ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </Card>
