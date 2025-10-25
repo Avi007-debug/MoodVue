@@ -10,7 +10,14 @@ def create_app():
     app = Flask(__name__)
     
     # Enable CORS
-    CORS(app, supports_credentials=True) # Allow frontend to send credentials
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["http://localhost:5000", "http://localhost:3000"],  # Frontend URLs
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-User-Id"],
+            "supports_credentials": True
+        }
+    })
 
     # Register the blueprint
     from app.routes import api_bp

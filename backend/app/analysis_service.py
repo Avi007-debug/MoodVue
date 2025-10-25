@@ -2,8 +2,13 @@ import cv2
 import threading
 import time
 import atexit
+import asyncio
 from deepface import DeepFace
 import numpy as np
+from typing import Optional
+from uuid import UUID
+
+from app.services.session_service import SessionService
 
 # Emotion to Stress Score Mapping
 STRESS_MAP = {
@@ -27,6 +32,9 @@ class AnalysisService:
         }
         self.history_log = []
         self.last_frame = None
+        self.current_session_id: Optional[UUID] = None
+        self.current_user_id: Optional[UUID] = None
+        self.session_service = SessionService()
 
         # --- Camera Initialization ---
         try:
@@ -137,11 +145,32 @@ class AnalysisService:
                             "region": {'x':0,'y':0,'w':0,'h':0}
                         }
 
-                    # Update global state
+                    # Update global state and store in database
                     with self.data_lock:
                         self.last_analysis = analysis_result
                         self.history_log.append(analysis_result)
                         self.history_log = self.history_log[-100:]
+                        
+                        # Record emotion if we have an active session
+                        if self.current_session_id and self.current_user_id:
+                            try:
+                                # Store emotion data for async processing
+                                loop = asyncio.get_event_loop()
+                                if loop and loop.is_running():
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        self.session_service.record_emotion(
+                                            self.current_session_id,
+                                            analysis_result
+                                        ),
+                                        loop
+                                    )
+                                    future.add_done_callback(lambda f: print(
+                                        f"Emotion recorded: {f.result() if not f.cancelled() else 'cancelled'}"
+                                    ))
+                                else:
+                                    print("Warning: Event loop not running, emotion not recorded")
+                            except Exception as e:
+                                print(f"Error recording emotion: {e}", flush=True)
 
                 frame_count += 1
                 time.sleep(0.01)
@@ -192,11 +221,55 @@ class AnalysisService:
         with self.data_lock:
             return self.history_log
 
+    async def start_session(self, user_id: UUID) -> dict:
+        """Start a new analysis session for a user."""
+        try:
+            print(f"Starting session for user {user_id}")
+            self.current_user_id = user_id
+            session = await self.session_service.create_session(user_id)
+            print(f"Created session: {session}")
+            
+            if session and session.get('id'):
+                self.current_session_id = UUID(session['id'])
+                print(f"Set current_session_id to {self.current_session_id}")
+            else:
+                print(f"Warning: Invalid session response: {session}")
+                
+            return session
+        except Exception as e:
+            print(f"Error in start_session: {e}")
+            raise
+
+    async def end_session(self) -> dict:
+        """End the current analysis session."""
+        if self.current_session_id:
+            session = await self.session_service.end_session(self.current_session_id)
+            self.current_session_id = None
+            self.current_user_id = None
+            return session
+        return None
+
+    async def get_user_sessions(self, user_id: UUID, days: int = 7) -> list:
+        """Get all sessions for a user within the specified time period."""
+        return await self.session_service.get_user_sessions(user_id, days)
+
+    async def get_session_stats(self, session_id: UUID) -> dict:
+        """Get statistics for a specific session."""
+        return await self.session_service.get_session_stats(session_id)
+
+    async def get_session_emotions(self, session_id: UUID) -> list:
+        """Get all emotion records for a session."""
+        return await self.session_service.get_session_emotions(session_id)
+
     def cleanup(self):
-        """Release camera on exit."""
+        """Release camera and end session on exit."""
         if self.camera and self.camera.isOpened():
             self.camera.release()
             print("Camera released.")
+        
+        if self.current_session_id:
+            import asyncio
+            asyncio.create_task(self.end_session())
 
 # Create a single instance to be shared across the app
 analysis_service = AnalysisService()

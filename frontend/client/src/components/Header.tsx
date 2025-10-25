@@ -40,7 +40,7 @@ export default function Header({
         <div className="flex items-center justify-center w-9 h-9 rounded-full bg-primary/10">
           <Brain className="w-5 h-5 text-primary" />
         </div>
-        <h1 className="text-xl font-heading font-semibold text-foreground">EmotionSense</h1>
+        <h1 className="text-xl font-heading font-semibold text-foreground">MoodVue</h1>
       </button>
       
       <div className="flex items-center gap-2">

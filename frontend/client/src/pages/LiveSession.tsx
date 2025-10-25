@@ -3,6 +3,7 @@ import LiveSessionCamera from "@/components/LiveSessionCamera";
 import SessionControls from "@/components/SessionControls";
 import EmotionDisplay from "@/components/EmotionDisplay";
 import TrendChart from "@/components/TrendChart";
+import { useAuth } from "@/context/AuthContext";
 
 type SessionStatus = "idle" | "active" | "paused";
 
@@ -31,6 +32,7 @@ interface TrendDataPoint {
 }
 
 export default function LiveSession() {
+  const { user } = useAuth();
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("idle");
   const [faceDetected, setFaceDetected] = useState(false);
   const [emotionData, setEmotionData] = useState<EmotionData>({
@@ -44,6 +46,15 @@ export default function LiveSession() {
   const pollInterval = useRef<NodeJS.Timeout>();
 
   // Effect for polling emotion data
+  // Clean up session when component unmounts
+  useEffect(() => {
+    return () => {
+      if (sessionStatus === 'active') {
+        handleStop();
+      }
+    };
+  }, [sessionStatus]);
+
   useEffect(() => {
     const pollEmotionData = async () => {
       try {
@@ -101,10 +112,30 @@ export default function LiveSession() {
     };
   }, [sessionStatus]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     console.log("Starting session...");
-    setSessionStatus("active");
-    startTimeRef.current = Date.now();
+    try {
+      // Start session in backend
+      const response = await fetch('http://localhost:5001/api/sessions/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user?.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start session');
+      }
+
+      setSessionStatus("active");
+      startTimeRef.current = Date.now();
+    } catch (error) {
+      console.error('Error starting session:', error);
+      // Show error to user
+    }
   };
 
   const handlePause = () => {
@@ -115,14 +146,31 @@ export default function LiveSession() {
     }
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
     console.log("Stopping session...");
-    setSessionStatus("idle");
-    setFaceDetected(false);
-    setTrendData([]);
-    setEmotionData({ emotion: "calm", score: 0, confidence: 0 });
-    if (pollInterval.current) {
-      clearInterval(pollInterval.current);
+    try {
+      // End session in backend
+      const response = await fetch('http://localhost:5001/api/sessions/end', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to end session');
+      }
+
+      setSessionStatus("idle");
+      setFaceDetected(false);
+      setTrendData([]);
+      setEmotionData({ emotion: "calm", score: 0, confidence: 0 });
+      if (pollInterval.current) {
+        clearInterval(pollInterval.current);
+      }
+    } catch (error) {
+      console.error('Error ending session:', error);
+      // Show error to user
     }
   };
 
