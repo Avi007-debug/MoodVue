@@ -12,7 +12,7 @@ STRESS_MAP = {
     "surprise": 40,
     "sad": 70,
     "fear": 80,
-    "angry": 85,
+    "angry": 95,
     "disgust": 75
 }
 
@@ -48,10 +48,7 @@ class AnalysisService:
         print("Background processing thread started.")
 
     def _process_frames(self):
-        """
-        Private method to run in a background thread.
-        Continuously captures and analyzes frames.
-        """
+        """Private method to run in a background thread. Continuously captures and analyzes frames."""
         frame_count = 0
         while True:
             if self.camera is None:
@@ -70,76 +67,68 @@ class AnalysisService:
                     print("Failed to read frame.")
                     time.sleep(0.1)
                     continue
-                
+
                 # Store the latest frame
                 with self.data_lock:
                     self.last_frame = frame.copy()
 
-                # --- Optimization: Analyze every 5th frame ---
+                # Analyze every 5th frame (from version 1)
                 if frame_count % 5 == 0:
-                    # In analysis_service.py, inside the `if frame_count % ...` block:
-
                     try:
                         result = DeepFace.analyze(
                             frame, 
                             actions=['emotion'], 
                             enforce_detection=False,
-                            silent=True
+                            silent=True,
+                            detector_backend='ssd'
                         )
-                        
+
                         if isinstance(result, list) and len(result) > 0:
-                            
-                            all_emotions = result[0]['emotion'] 
+                            all_emotions = result[0]['emotion']
                             dominant_emotion = result[0]['dominant_emotion']
                             face_region = result[0]['region']
-                            
-                            # Check if the winner is "neutral" and it's not a super-confident neutral
+
+                            # --- Neutral override logic (version 1) ---
                             if dominant_emotion == 'neutral' and all_emotions['neutral'] < 80:
-                                
-                                # Find the next highest emotion
                                 secondary_emotions = {k: v for k, v in all_emotions.items() if k != 'neutral'}
                                 next_highest_emotion = max(secondary_emotions, key=secondary_emotions.get)
-                                
-                                # Check if this secondary emotion is a "stress" emotion
-                                # and if it's strong enough to care about (e.g., > 20%)
                                 if next_highest_emotion in ['sad', 'angry', 'fear', 'disgust'] and secondary_emotions[next_highest_emotion] > 20:
-                                    
-                                    # --- OVERRIDE! ---
-                                    dominant_emotion = next_highest_emotion 
-                            
-                            # --- END OF NEW LOGIC ---
+                                    dominant_emotion = next_highest_emotion
+                            # --- END neutral override ---
 
-                            confidence = round(all_emotions[dominant_emotion] / 100, 2)
-                            stress_score = STRESS_MAP.get(dominant_emotion, 50)
-                            
+                            # --- Weighted stress score (version 2) ---
+                            weighted_stress_score = 0
+                            for emotion, percentage in all_emotions.items():
+                                stress_value = STRESS_MAP.get(emotion, 0)
+                                weighted_stress_score += (percentage / 100) * stress_value
+
                             analysis_result = {
                                 "emotion": dominant_emotion,
-                                "confidence": confidence,
-                                "stress_score": stress_score,
+                                "confidence": round(all_emotions[dominant_emotion] / 100, 2),
+                                "stress_score": int(round(weighted_stress_score)),
                                 "all_emotions": all_emotions,
                                 "face_detected": True,
                                 "region": face_region
                             }
-                            
                         else:
                             analysis_result = {
-                                "emotion": "unknown", 
-                                "confidence": 0.0, 
+                                "emotion": "unknown",
+                                "confidence": 0.0,
                                 "stress_score": 0,
                                 "face_detected": False,
                                 "region": {'x':0,'y':0,'w':0,'h':0}
                             }
 
                     except Exception as e:
-                        print(f"!!! DEEPFACE CRASHED: {e}") 
+                        print(f"!!! DEEPFACE CRASHED: {e}")
                         analysis_result = {
-                            "emotion": "error", 
-                            "confidence": 0.0, 
+                            "emotion": "error",
+                            "confidence": 0.0,
                             "stress_score": -1,
                             "face_detected": False,
                             "region": {'x':0,'y':0,'w':0,'h':0}
                         }
-                    
+
                     # Update global state
                     with self.data_lock:
                         self.last_analysis = analysis_result
@@ -147,9 +136,7 @@ class AnalysisService:
                         self.history_log = self.history_log[-100:]
 
                 frame_count += 1
-                time.sleep(0.01) # Control loop speed
-
-    # In analysis_service.py
+                time.sleep(0.01)
 
     def generate_video_feed(self):
         """Generator for the video feed."""
@@ -160,24 +147,19 @@ class AnalysisService:
 
             with self.data_lock:
                 frame = self.last_frame.copy()
-                # Get all analysis data at once
                 analysis_data = self.last_analysis.copy()
-            
-            # Get individual items for text drawing
+
             emotion = analysis_data.get("emotion", "loading...")
             stress = analysis_data.get("stress_score", 0)
 
-            # --- NEW: Draw rectangle ---
+            # Draw bounding box if face detected
             if analysis_data.get("face_detected", False):
                 try:
                     region = analysis_data['region']
                     x, y, w, h = region['x'], region['y'], region['w'], region['h']
-                    
-                    # Draw the GREEN bounding box (BGR format)
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 except Exception as e:
                     print(f"Error drawing rectangle: {e}")
-            # --- END NEW ---
 
             # Draw info on the frame
             cv2.putText(frame, f"Emotion: {emotion}", (10, 30), 
@@ -185,7 +167,7 @@ class AnalysisService:
             cv2.putText(frame, f"Stress: {stress}", (10, 60), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
 
-            (flag, encodedImage) = cv2.imencode(".jpg", frame)
+            flag, encodedImage = cv2.imencode(".jpg", frame)
             if not flag:
                 continue
 
