@@ -77,6 +77,8 @@ class AnalysisService:
 
                 # --- Optimization: Analyze every 5th frame ---
                 if frame_count % 5 == 0:
+                    # In analysis_service.py, inside the `if frame_count % ...` block:
+
                     try:
                         result = DeepFace.analyze(
                             frame, 
@@ -86,19 +88,41 @@ class AnalysisService:
                         )
                         
                         if isinstance(result, list) and len(result) > 0:
+                            
+                            all_emotions = result[0]['emotion'] 
                             dominant_emotion = result[0]['dominant_emotion']
-                            confidence = round(result[0]['emotion'][dominant_emotion] / 100, 2)
+                            
+                            # Check if the winner is "neutral" and it's not a super-confident neutral
+                            if dominant_emotion == 'neutral' and all_emotions['neutral'] < 80:
+                                
+                                # Find the next highest emotion
+                                secondary_emotions = {k: v for k, v in all_emotions.items() if k != 'neutral'}
+                                next_highest_emotion = max(secondary_emotions, key=secondary_emotions.get)
+                                
+                                # Check if this secondary emotion is a "stress" emotion
+                                # and if it's strong enough to care about (e.g., > 20%)
+                                if next_highest_emotion in ['sad', 'angry', 'fear', 'disgust'] and secondary_emotions[next_highest_emotion] > 20:
+                                    
+                                    # --- OVERRIDE! ---
+                                    dominant_emotion = next_highest_emotion 
+                            
+                            # --- END OF NEW LOGIC ---
+
+                            confidence = round(all_emotions[dominant_emotion] / 100, 2)
                             stress_score = STRESS_MAP.get(dominant_emotion, 50)
                             
                             analysis_result = {
                                 "emotion": dominant_emotion,
                                 "confidence": confidence,
-                                "stress_score": stress_score
+                                "stress_score": stress_score,
+                                "all_emotions": all_emotions
                             }
+                            
                         else:
                             analysis_result = {"emotion": "unknown", "confidence": 0.0, "stress_score": 0}
 
                     except Exception as e:
+                        print(f"!!! DEEPFACE CRASHED: {e}") 
                         analysis_result = {"emotion": "error", "confidence": 0.0, "stress_score": -1}
                     
                     # Update global state
