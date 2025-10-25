@@ -1,8 +1,8 @@
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 from app.analysis_service import analysis_service # Import the singleton instance
 
-# Create a Blueprint
-api_bp = Blueprint('api', __name__)
+# Create a Blueprint with url_prefix
+api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 @api_bp.route("/")
 def index():

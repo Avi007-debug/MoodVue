@@ -1,6 +1,15 @@
-import { Brain, User, Settings } from "lucide-react";
+import { Brain, Settings, User, LogOut, UserCog, LineChart, Bell, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 
@@ -9,9 +18,16 @@ interface HeaderProps {
   userAvatar?: string;
   onProfileClick?: () => void;
   onSettingsClick?: () => void;
+  onLogout?: () => void;
 }
 
-export default function Header({ userName = "Guest", userAvatar, onProfileClick, onSettingsClick }: HeaderProps) {
+export default function Header({ 
+  userName = "Guest", 
+  userAvatar, 
+  onProfileClick, 
+  onSettingsClick,
+  onLogout 
+}: HeaderProps) {
   const [, setLocation] = useLocation();
 
   return (
@@ -35,27 +51,74 @@ export default function Header({ userName = "Guest", userAvatar, onProfileClick,
         
         <ThemeToggle />
         
-        <Button 
-          size="icon" 
-          variant="ghost" 
-          onClick={onSettingsClick}
-          data-testid="button-settings"
-        >
-          <Settings className="w-5 h-5" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              data-testid="button-settings"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56" align="end">
+            <DropdownMenuLabel>Settings</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={onSettingsClick}>
+                <UserCog className="mr-2 h-4 w-4" />
+                <span>Profile Settings</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLocation("/insights")}>
+                <LineChart className="mr-2 h-4 w-4" />
+                <span>Insights</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Bell className="mr-2 h-4 w-4" />
+                <span>Notifications</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Key className="mr-2 h-4 w-4" />
+                <span>Privacy</span>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         
-        <Button 
-          variant="ghost" 
-          className="gap-2 px-2"
-          onClick={onProfileClick}
-          data-testid="button-profile"
-        >
-          <Avatar className="w-8 h-8">
-            <AvatarImage src={userAvatar} />
-            <AvatarFallback>{userName.slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <span className="hidden md:inline text-sm font-medium">{userName}</span>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="ghost" 
+              className="gap-2 px-2"
+              data-testid="button-profile"
+            >
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={userAvatar} />
+                <AvatarFallback>{userName.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span className="hidden md:inline text-sm font-medium">{userName}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56" align="end">
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={onProfileClick}>
+                <User className="mr-2 h-4 w-4" />
+                <span>Profile</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLocation("/settings")}>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onLogout} className="text-red-500 focus:text-red-500">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
