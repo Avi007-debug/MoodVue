@@ -17,12 +17,17 @@ interface Profile {
   };
 }
 
+interface AuthResponse {
+  session: Session | null;
+  user: User | null;
+}
+
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   session: Session | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthResponse>;
+  register: (email: string, password: string, fullName: string) => Promise<AuthResponse>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }

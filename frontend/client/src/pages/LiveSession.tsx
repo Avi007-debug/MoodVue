@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import LiveSessionCamera from "@/components/LiveSessionCamera";
 import SessionControls from "@/components/SessionControls";
 import EmotionDisplay from "@/components/EmotionDisplay";
@@ -6,36 +6,127 @@ import TrendChart from "@/components/TrendChart";
 
 type SessionStatus = "idle" | "active" | "paused";
 
+type EmotionType = "happy" | "sad" | "neutral" | "stressed" | "calm";
+
+// Map backend emotions to frontend emotions
+const emotionMapping: Record<string, EmotionType> = {
+  "happy": "happy",
+  "sad": "sad",
+  "neutral": "neutral",
+  "angry": "stressed",
+  "fear": "stressed",
+  "disgust": "stressed",
+  "calm": "calm"
+};
+
+interface EmotionData {
+  emotion: EmotionType;
+  score: number;
+  confidence: number;
+}
+
+interface TrendDataPoint {
+  time: string;
+  score: number;
+}
+
 export default function LiveSession() {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("idle");
   const [faceDetected, setFaceDetected] = useState(false);
+  const [emotionData, setEmotionData] = useState<EmotionData>({
+    emotion: "calm",
+    score: 0,
+    confidence: 0
+  });
+  const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
 
-  const mockTrendData = [
-    { time: "0s", score: 65 },
-    { time: "10s", score: 68 },
-    { time: "20s", score: 72 },
-    { time: "30s", score: 70 },
-    { time: "40s", score: 75 },
-    { time: "50s", score: 78 },
-    { time: "60s", score: 76 },
-  ];
+  const startTimeRef = useRef<number>(0);
+  const pollInterval = useRef<NodeJS.Timeout>();
+
+  // Effect for polling emotion data
+  useEffect(() => {
+    const pollEmotionData = async () => {
+      try {
+        const response = await fetch('http://localhost:5001/api/analyze');
+        const data = await response.json();
+        
+        if (
+          data.emotion &&
+          typeof data.emotion === "string" &&
+          data.emotion in emotionMapping &&
+          typeof data.stress_score === "number" &&
+          typeof data.confidence === "number"
+        ) {
+          const emotion = emotionMapping[data.emotion];
+          console.log("Received emotion data:", {
+            emotion: data.emotion,
+            mappedEmotion: emotion,
+            score: data.stress_score,
+            confidence: data.confidence
+          });
+          
+          setEmotionData({
+            emotion,
+            score: data.stress_score,
+            confidence: data.confidence * 100 // Convert to percentage
+          });
+
+          setFaceDetected(data.face_detected || false);
+          
+          setTrendData(prev => {
+            const newPoint: TrendDataPoint = {
+              time: `${Math.floor((Date.now() - startTimeRef.current) / 1000)}s`,
+              score: data.stress_score
+            };
+            return [...prev, newPoint].slice(-60);
+          });
+        }
+      } catch (error) {
+        console.error('Error polling emotion data:', error);
+      }
+    };
+
+    if (sessionStatus === 'active') {
+      startTimeRef.current = Date.now();
+      // Initial poll
+      pollEmotionData();
+      // Set up polling interval
+      pollInterval.current = setInterval(pollEmotionData, 1000);
+    }
+
+    return () => {
+      if (pollInterval.current) {
+        clearInterval(pollInterval.current);
+      }
+    };
+  }, [sessionStatus]);
 
   const handleStart = () => {
+    console.log("Starting session...");
     setSessionStatus("active");
-    setFaceDetected(true);
-    console.log("Session started");
+    startTimeRef.current = Date.now();
   };
 
   const handlePause = () => {
+    console.log("Pausing session...");
     setSessionStatus("paused");
-    console.log("Session paused");
+    if (pollInterval.current) {
+      clearInterval(pollInterval.current);
+    }
   };
 
   const handleStop = () => {
+    console.log("Stopping session...");
     setSessionStatus("idle");
     setFaceDetected(false);
-    console.log("Session stopped");
+    setTrendData([]);
+    setEmotionData({ emotion: "calm", score: 0, confidence: 0 });
+    if (pollInterval.current) {
+      clearInterval(pollInterval.current);
+    }
   };
+
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,11 +138,11 @@ export default function LiveSession() {
 
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <LiveSessionCamera 
+            <LiveSessionCamera
               isActive={sessionStatus === "active"}
               faceDetected={faceDetected}
             />
-            
+
             <div className="relative">
               <SessionControls
                 status={sessionStatus}
@@ -61,17 +152,17 @@ export default function LiveSession() {
               />
             </div>
 
-            {sessionStatus === "active" && (
-              <TrendChart data={mockTrendData} height={160} />
+            {sessionStatus === "active" && trendData.length > 0 && (
+              <TrendChart data={trendData} height={160} />
             )}
           </div>
 
           <div className="space-y-6">
             {sessionStatus === "active" && (
-              <EmotionDisplay 
-                emotion="calm"
-                score={76}
-                confidence={89}
+              <EmotionDisplay
+                emotion={emotionData.emotion}
+                score={emotionData.score}
+                confidence={emotionData.confidence}
               />
             )}
           </div>

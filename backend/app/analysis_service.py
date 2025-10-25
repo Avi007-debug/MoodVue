@@ -54,12 +54,14 @@ class AnalysisService:
             if self.camera is None:
                 # Simulate data if no camera
                 time.sleep(1)
-                simulated_emotion = np.random.choice(list(STRESS_MAP.keys()))
-                simulated_score = STRESS_MAP[simulated_emotion]
+                simulated_emotion = str(np.random.choice(list(STRESS_MAP.keys())))
+                simulated_score = int(STRESS_MAP[simulated_emotion])
                 analysis_result = {
                     "emotion": simulated_emotion,
-                    "confidence": round(np.random.uniform(0.7, 0.99), 2),
-                    "stress_score": simulated_score
+                    "confidence": float(round(np.random.uniform(0.7, 0.99), 2)),
+                    "stress_score": simulated_score,
+                    "face_detected": True,
+                    "region": {'x': 0, 'y': 0, 'w': 0, 'h': 0}
                 }
             else:
                 success, frame = self.camera.read()
@@ -102,21 +104,27 @@ class AnalysisService:
                                 stress_value = STRESS_MAP.get(emotion, 0)
                                 weighted_stress_score += (percentage / 100) * stress_value
 
+                            # Convert numpy values to Python native types
                             analysis_result = {
-                                "emotion": dominant_emotion,
-                                "confidence": round(all_emotions[dominant_emotion] / 100, 2),
+                                "emotion": str(dominant_emotion),
+                                "confidence": float(round(all_emotions[dominant_emotion] / 100, 2)),
                                 "stress_score": int(round(weighted_stress_score)),
-                                "all_emotions": all_emotions,
-                                "face_detected": True,
-                                "region": face_region
+                                "all_emotions": {k: float(v) for k, v in all_emotions.items()},
+                                "face_detected": bool(True),
+                                "region": {
+                                    'x': int(face_region['x']),
+                                    'y': int(face_region['y']),
+                                    'w': int(face_region['w']),
+                                    'h': int(face_region['h'])
+                                }
                             }
                         else:
                             analysis_result = {
-                                "emotion": "unknown",
-                                "confidence": 0.0,
-                                "stress_score": 0,
-                                "face_detected": False,
-                                "region": {'x':0,'y':0,'w':0,'h':0}
+                                "emotion": "neutral",
+                                "confidence": float(0.0),
+                                "stress_score": int(0),
+                                "face_detected": bool(False),
+                                "region": {'x': 0, 'y': 0, 'w': 0, 'h': 0}
                             }
 
                     except Exception as e:
