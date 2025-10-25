@@ -75,7 +75,7 @@ class AnalysisService:
                     self.last_frame = frame.copy()
 
                 # Analyze every 5th frame (from version 1)
-                if frame_count % 5 == 0:
+                if frame_count % 30 == 0:
                     try:
                         result = DeepFace.analyze(
                             frame, 
