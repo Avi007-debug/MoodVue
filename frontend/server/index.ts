@@ -4,6 +4,9 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
+// Export for Vercel serverless functions
+export default app;
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown
