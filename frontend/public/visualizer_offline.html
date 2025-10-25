@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Stress vs Recording Time – Offline Minimal</title>
+  <style>
+    body{margin:0;background:#0b1020;color:#e7ecf3;font-family:Arial,system-ui}
+    .wrap{max-width:1000px;margin:24px auto;padding:16px}
+    .card{background:#121a2b;border-radius:16px;padding:16px}
+    h1{margin:0 0 8px;font-size:18px}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}
+    .controls>*{background:#0f1830;border:1px solid #27314a;color:#dfe7f5;border-radius:10px;padding:8px 10px;font-size:14px}
+    .primary{background:#7c5cff;border-color:transparent}
+    .plot{position:relative;height:420px;background:#0d1430;border:1px solid #27314a;border-radius:12px;overflow:hidden}
+    .legend{margin-top:6px;font-size:12px;color:#b8c4d9}
+    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+    .side{background:#0e1530;border:1px solid #27314a;border-radius:12px;padding:12px}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+    .kv{margin:10px 0 0}
+    .kv b{display:block;font-size:12px;color:#a9b6cc;margin-bottom:2px}
+    .badge{display:inline-block;border:1px solid #26334d;padding:4px 8px;border-radius:999px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Stress vs Recording Time (offline minimal)</h1>
+      <div class="grid">
+        <div>
+          <div class="controls">
+            <button id="btnRun" class="primary">⏸️ Pause</button>
+            <button id="btnClear">🧹 Clear</button>
+            <label>Window (s) <input id="win" type="number" value="120" min="5" max="3600" style="width:80px"></label>
+            <label>Threshold <input id="thr" type="number" value="70" min="0" max="100" style="width:70px"></label>
+            <label><input id="smooth" type="checkbox" checked> Smoothing</label>
+            <button id="pngBtn">🖼️ PNG</button>
+            <button id="csvBtn">📄 CSV</button>
+          </div>
+          <div class="plot"><canvas id="c"></canvas></div>
+          <div class="legend">
+            <span class="dot" style="background:#7c5cff"></span>Stress (raw)
+            &nbsp;&nbsp;<span class="dot" style="background:#2ecc71"></span>Smoothed (EMA)
+            &nbsp;&nbsp;<span class="dot" style="background:#ff4d6d"></span>Threshold
+          </div>
+        </div>
+        <div class="side">
+          <div class="kv"><b>Now</b><span id="now">–</span></div>
+          <div class="kv"><b>Smoothed</b><span id="sval">–</span></div>
+          <div class="kv"><b>Status</b><span id="status" class="badge">Idle</span></div>
+          <div class="kv"><b>Last emotion</b><span id="emo" class="badge">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  // ===== state =====
+  var EMA_ALPHA = 0.2;
+  var running = true;
+  var data = [];     // {x: seconds, y: 0..100, meta}
+  var ema  = [];
+  var windowSec = 120;
+  var threshold = 70;
+  var smoothedOn = true;
+  var t0 = performance.now();
+
+  // ===== canvas setup =====
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  function resize(){
+    var r = canvas.parentNode.getBoundingClientRect();
+    var dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(r.width * dpr);
+    canvas.height = Math.floor(420 * dpr);
+    canvas.style.width = r.width + "px";
+    canvas.style.height = "420px";
+    draw();
+  }
+  window.addEventListener('resize', resize);
+
+  // ===== utils =====
+  function clamp01(v){ v = Number(v); if (isNaN(v)) v = 0; if (v<0) v=0; if (v>100) v=100; return v; }
+  function mmss(s){ s=Math.max(0, s||0); var m=Math.floor(s/60); var sec=("0"+Math.floor(s%60)).slice(-2); return m+":"+sec; }
+
+  function xRange(){
+    var last = data.length ? data[data.length-1].x : 0;
+    var min = Math.max(0, last - windowSec);
+    var max = Math.max(windowSec/5, last);
+    return {min:min, max:max};
+  }
+
+  function recomputeEMA(){
+    ema = [];
+    var last = null;
+    for (var i=0;i<data.length;i++){
+      var y = data[i].y;
+      last = (last===null) ? y : (EMA_ALPHA*y + (1-EMA_ALPHA)*last);
+      ema.push({x:data[i].x, y:last});
+    }
+  }
+
+  // ===== drawing =====
+  function drawGrid(xmin, xmax){
+    var dpr = Math.max(1, window.devicePixelRatio || 1);
+    var W = canvas.width/dpr, H = canvas.height/dpr;
+    var left=50, right=20, top=12, bottom=28;
+    ctx.save(); ctx.scale(dpr,dpr);
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(left, top, W-left-right, H-top-bottom);
+    // x ticks
+    var span = Math.max(1, xmax-xmin);
+    var ticks = Math.min(8, Math.floor(span/5)+1);
+    for (var i=0;i<=ticks;i++){
+      var x = left + (W-left-right)*(i/ticks);
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, H-bottom); ctx.stroke();
+      var t = xmin + (xmax-xmin)*(i/ticks);
+      ctx.fillStyle="#b8c4d9"; ctx.font="12px Arial"; ctx.textAlign="center";
+      ctx.fillText(mmss(t), x, H-6);
+    }
+    // y ticks
+    for (var j=0;j<=5;j++){
+      var y = top + (H-top-bottom)*(1 - j/5);
+      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(W-right, y); ctx.stroke();
+      ctx.fillStyle="#b8c4d9"; ctx.font="12px Arial"; ctx.textAlign="right";
+      ctx.fillText(String(j*20), left-8, y+4);
+    }
+    ctx.restore();
+  }
+
+  function toXY(p, xmin, xmax){
+    var dpr = Math.max(1, window.devicePixelRatio || 1);
+    var W = canvas.width/dpr, H = canvas.height/dpr;
+    var left=50, right=20, top=12, bottom=28;
+    var px = left + (W-left-right)*((p.x - xmin)/Math.max(0.0001, (xmax-xmin)));
+    var py = top + (H-top-bottom)*(1 - p.y/100);
+    return {x:px, y:py};
+  }
+
+  function drawSeries(series, color){
+    if (series.length<2) return;
+    var xr = xRange(), xmin=xr.min, xmax=xr.max;
+    var dpr = Math.max(1, window.devicePixelRatio || 1);
+    ctx.save(); ctx.scale(dpr,dpr);
+    ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.beginPath();
+    var started=false;
+    for (var i=0;i<series.length;i++){
+      var p = series[i];
+      if (p.x < xmin || p.x > xmax) continue;
+      var pt = toXY(p, xmin, xmax);
+      if (!started){ ctx.moveTo(pt.x, pt.y); started=true; } else { ctx.lineTo(pt.x, pt.y); }
+    }
+    ctx.stroke(); ctx.restore();
+  }
+
+  function drawThreshold(){
+    var xr = xRange(), xmin=xr.min, xmax=xr.max;
+    var dpr = Math.max(1, window.devicePixelRatio || 1);
+    var W = canvas.width/dpr, H = canvas.height/dpr;
+    var left=50, right=20, top=12, bottom=28;
+    var y = top + (H-top-bottom)*(1 - threshold/100);
+    ctx.save(); ctx.scale(dpr,dpr);
+    ctx.setLineDash([6,6]); ctx.strokeStyle="#ff4d6d"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(W-right, y); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+  }
+
+  function updateStats(){
+    var nowEl = document.getElementById("now");
+    var sEl = document.getElementById("sval");
+    var st = document.getElementById("status");
+    var latest = data.length ? data[data.length-1] : null;
+    nowEl.textContent = latest ? latest.y.toFixed(2) : "–";
+    var sLast = ema.length ? ema[ema.length-1].y : null;
+    sEl.textContent = (sLast!=null) ? sLast.toFixed(2) : "–";
+    var curr = (smoothedOn && sLast!=null) ? sLast : (latest ? latest.y : null);
+    if (curr==null){ st.textContent="Idle"; st.style.borderColor="#26334d"; return; }
+    var label = curr>=threshold ? "High" : (curr>=threshold*0.7 ? "Elevated" : "Normal");
+    st.textContent = label;
+    st.style.borderColor = (label==="High")?"#ff4d6d":(label==="Elevated"?"#ffb020":"#2ecc71");
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    var xr = xRange();
+    drawGrid(xr.min, xr.max);
+    drawThreshold();
+    drawSeries(data, "#7c5cff");
+    if (smoothedOn) drawSeries(ema, "#2ecc71");
+    updateStats();
+  }
+
+  function pushPoint(x, y, meta){
+    data.push({x:x, y:y, meta:meta||{}});
+    if (smoothedOn){
+      var prev = ema.length ? ema[ema.length-1].y : y;
+      var e = EMA_ALPHA*y + (1-EMA_ALPHA)*prev;
+      ema.push({x:x, y:e});
+    }
+    var emoEl = document.getElementById("emo");
+    if (meta && meta.emotion) emoEl.textContent = meta.emotion;
+    draw();
+  }
+
+  // ===== public API on window =====
+  window.startSession = function(){
+    t0 = performance.now();
+    data = []; ema = [];
+    draw();
+  };
+
+  window.addStressSample = function(value, meta){
+    if (!running) return;
+    var v = clamp01(value);
+    var x = (performance.now() - t0)/1000;
+    pushPoint(x, v, meta||{});
+  };
+
+  window.addStressSampleAt = function(tSec, value, meta){
+    var v = clamp01(value);
+    pushPoint(Number(tSec), v, meta||{});
+    data.sort(function(a,b){return a.x-b.x;});
+    recomputeEMA();
+    draw();
+  };
+
+  window.addStressBatchRelative = function(arr){
+    for (var i=0;i<arr.length;i++){
+      var p = arr[i];
+      pushPoint(Number(p.t), clamp01(p.value), {emotion:p.emotion});
+    }
+    data.sort(function(a,b){return a.x-b.x;});
+    recomputeEMA();
+    draw();
+  };
+
+  window.stopDemo = function(){ clearInterval(demo); };
+
+  // ===== controls =====
+  document.getElementById("btnRun").onclick = function(){
+    running = !running;
+    this.textContent = running ? "⏸️ Pause" : "▶️ Resume";
+  };
+  document.getElementById("btnClear").onclick = function(){
+    data = []; ema = []; document.getElementById("emo").textContent = "—"; draw();
+  };
+  document.getElementById("win").onchange = function(){ windowSec = Math.max(5, Math.min(3600, Number(this.value)||120)); draw(); };
+  document.getElementById("thr").onchange = function(){ threshold = Math.max(0, Math.min(100, Number(this.value)||70)); draw(); };
+  document.getElementById("smooth").onchange = function(){ smoothedOn = !!this.checked; recomputeEMA(); draw(); };
+
+  document.getElementById("pngBtn").onclick = function(){
+    var off = document.createElement("canvas");
+    off.width = canvas.width; off.height = canvas.height;
+    off.getContext("2d").drawImage(canvas,0,0);
+    var a=document.createElement("a");
+    a.href = off.toDataURL("image/png");
+    a.download = "stress_timeline.png";
+    a.click();
+  };
+  document.getElementById("csvBtn").onclick = function(){
+    var rows = [["t_seconds","stress","ema","emotion"]];
+    for (var i=0;i<data.length;i++){
+      var p = data[i]; var e = ema[i] ? ema[i].y : "";
+      rows.push([p.x, p.y, e, (p.meta&&p.meta.emotion)||""]);
+    }
+    var csv = rows.map(function(r){return r.join(",");}).join("\n");
+    var blob = new Blob([csv], {type:"text/csv"});
+    var url = URL.createObjectURL(blob);
+    var a=document.createElement("a"); a.href=url; a.download="stress_timeline.csv"; a.click(); URL.revokeObjectURL(url);
+  };
+
+  // ===== demo =====
+  resize();
+  window.startSession();
+  var demo = setInterval(function(){
+    if (!running) return;
+    var base = 40 + 25*Math.sin((data.length||0)/10);
+    var noise = (Math.random()-0.5)*12;
+    var v = clamp01(base + noise);
+    var emo = v>75? "angry" : (v>60? "stressed" : (v>45? "neutral" : "calm"));
+    window.addStressSample(v, {emotion:emo});
+  }, 100);
+})();
+</script>
+</body>
+</html>
