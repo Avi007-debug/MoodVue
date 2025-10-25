@@ -1,6 +1,7 @@
 const API_BASE_URL = '/api';
 
 export const api = {
+  baseUrl: API_BASE_URL,
   // Get video feed URL
   getVideoFeedUrl: () => `${API_BASE_URL}/video_feed`,
   
