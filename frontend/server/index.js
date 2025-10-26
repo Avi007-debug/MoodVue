@@ -1,5 +1,6 @@
 import express from "express";
-import { registerRoutes } from "./routes.js";
+import { URL } from "node:url";
+import { registerRoutes } from new URL("./routes.js", import.meta.url).pathname;
 import { setupVite, serveStatic, log } from "./vite.js";
 
 const app = express();
