@@ -38,7 +38,7 @@ export default function Home() {
       <div className="max-w-6xl mx-auto p-4 md:p-8 py-12 space-y-12">
         <div className="text-center space-y-4">
           <h1 className="text-4xl md:text-5xl font-heading font-bold">
-            Welcome to EmotionSense
+            Welcome to MoodVue
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Your AI-powered companion for emotional wellness and self-awareness

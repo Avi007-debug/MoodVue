@@ -12,7 +12,7 @@ def create_app():
     # Enable CORS
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["http://localhost:5000", "http://localhost:3000","https://mood-vue.vercel.app/"],  # Frontend URLs
+            "origins": ["http://localhost:5000", "http://localhost:3000","https://mood-vue.vercel.app/","https://mood-vue-gcr2.vercel.app/"],  # Frontend URLs
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "X-User-Id"],
             "supports_credentials": True
